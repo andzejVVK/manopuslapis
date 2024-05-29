@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MParkai</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+    *,
+    :after,
+    :before {
+        box-sizing: border-box;
+        padding: 0;
+        margin: 0;
+    }
+
+    html, body {
+        height: 100%;
+    }
+
+    #map {
+        width: 100%;
+        height: 100%;
+        position: relative;
+    }
+
+    body {
+        position: relative;
+        background-color: #f1f1f1;
+    }
+
+    .description {
+        width: 250px;
+        font-size: 16px;
+        color: #333;
+        padding: 10px 14px;
+        background-color: hsla(0, 0%, 100%, 0.8);
+        box-shadow: 0 0 15px rgb(0 0 0 / 20%);
+        border-radius: 5px;
+        line-height: 120%;
+        border: 1px solid grey;
+    }
+
+    .leaflet-marker-icon {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: #fff;
+        font-size: 12px;
+        line-height: 13px;
+        box-shadow: 0px 0px 10px rgb(223, 223, 223);
+        border-radius: 100%;
+        border: 3px solid #00f134;
+        padding: 13px;
+        background: #00f134;
+    }
+
+    .leaflet-marker-icon-bar {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: #fff;
+        font-size: 12px;
+        line-height: 13px;
+        box-shadow: 0px 0px 10px rgb(223, 223, 223);
+        border-radius: 100%;
+        border: 3px solid #ff5733;
+        padding: 13px;
+        background: #ff5733;
+    }
+
+    .leaflet-marker-icon-hotel {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: #fff;
+        font-size: 12px;
+        line-height: 13px;
+        box-shadow: 0px 0px 10px rgb(223, 223, 223);
+        border-radius: 100%;
+        border: 3px solid #3498db;
+        padding: 13px;
+        background: #3498db;
+    }
+
+    .legend {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        background: white;
+        padding: 10px;
+        border-radius: 5px;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+        font-size: 14px;
+        line-height: 1.5;
+        border: 1px solid grey;
+        z-index: 1000;
+        pointer-events: none;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 5px;
+    }
+
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        margin-right: 10px;
+        border-radius: 50%;
+        border: 3px solid;
+    }
+
+    .legend-color.park {
+        background: #00f134;
+        border-color: #00f134;
+    }
+
+    .legend-color.bar {
+        background: #ff5733;
+        border-color: #ff5733;
+    }
+
+    .legend-color.hotel {
+        background: #3498db;
+        border-color: #3498db;
+    }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color park"></div>Parkai
+        </div>
+        <div class="legend-item">
+            <div class="legend-color bar"></div>Barai and Restoranai
+        </div>
+        <div class="legend-item">
+            <div class="legend-color hotel"></div>Hoteliai
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        let config = {
+            minZoom: 7,
+            maxZoom: 18
+        };
+        const zoom = 18;
+        const lat = 54.679737;
+        const lng = 25.249413;
+
+        const map = L.map("map", config).setView([lat, lng], zoom);
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // žymeklių grupė
+        const parkMarkers = [
+            [54.679737, 25.249413],  // Vingio parkas, Vilnius
+            [54.682898, 25.292728],  // Bernardinų sodas, Vilnius
+            [54.672583, 25.280694],  // Sereikiškių parkas, Vilnius
+            [54.684791, 25.276503],  // Reformatų parkas, Vilnius
+            [54.701560, 25.259748],  // Šeškinės parkas, Vilnius
+            [54.709071, 25.269352],  // Ozo parkas, Vilnius
+            [54.676319, 25.234514],  // Rasų parkas, Vilnius
+            [54.664224, 25.255806],  // Markučių parkas, Vilnius
+            [54.676840, 25.299319],  // Sapiegų parkas, Vilnius
+            [54.708033, 25.320466],  // Verkių dvaro parkas, Vilnius
+            [54.675476, 25.240018],  // Pavilnių regioninis parkas
+            [54.744330, 25.267090],  // Verkių regioninis parkas
+            [54.759145, 25.242864],  // Belmontas
+            [54.742722, 25.214988],  // Trakų Vokės dvaras
+            [54.699892, 25.324289],  // Vilniaus universiteto botanikos sodas
+        ];
+
+        const barRestaurantMarkers = [
+            [54.687156, 25.279651],  // Alaus biblioteka, Vilnius
+            [54.690577, 25.275171],  // Užupio Picerija, Vilnius
+            [54.694459, 25.284535],  // Šnekutis, Vilnius
+            [54.689845, 25.277850],  // Piano Man Bar, Vilnius
+            [54.685037, 25.286266],  // Būsi trečias, Vilnius
+            [54.686713, 25.287684],  // Meat Lovers Pub, Vilnius
+            [54.689276, 25.273939],  // Paviljonas, Vilnius
+            [54.692413, 25.287292],  // The Portobello, Vilnius
+            [54.688167, 25.274839],  // Gringo Pub, Vilnius
+            [54.689576, 25.280128]   // Alchemikas, Vilnius
+        ];
+
+        const hotelMarkers = [
+            [54.689160, 25.279800],  // Hotel Pacai, Vilnius
+            [54.687451, 25.284756],  // Radisson Blu Royal Astorija Hotel, Vilnius
+            [54.694003, 25.274682],  // Kempinski Hotel Cathedral Square, Vilnius
+            [54.689014, 25.280411],  // Artagonist Art Hotel, Vilnius
+            [54.693388, 25.277479],  // Hotel Vilnia, Vilnius
+            [54.688625, 25.276899],  // Novotel Vilnius Centre, Vilnius
+            [54.690149, 25.279259],  // Imperial Hotel & Restaurant, Vilnius
+            [54.688968, 25.273423],  // Shakespeare Boutique Hotel, Vilnius
+            [54.690273, 25.285726],  // Grand Hotel Kempinski Vilnius, Vilnius
+            [54.690413, 25.277380]   // Stikliai Hotel, Vilnius
+        ];
+
+        // parkų žymeklių funkcijų grupė
+        const parkFg = L.featureGroup().addTo(map);
+
+        // parkų žymeklių pridėjimas
+        parkMarkers.forEach(([lat, lng], index) => {
+            L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: "leaflet-marker-icon",
+                    html: `<span>${index + 1}</span>`,
+                    popupAnchor: [10, -7],
+                }),
+            }).addTo(parkFg);
+        });
+
+        // barų ir restoranų žymeklių funkcijų grupė
+        const barRestaurantFg = L.featureGroup().addTo(map);
+
+        // barų ir restoranų žymeklių pridėjimas
+        barRestaurantMarkers.forEach(([lat, lng], index) => {
+            L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: "leaflet-marker-icon-bar",
+                    html: `<span>${index + 1}</span>`,
+                    popupAnchor: [10, -7],
+                }),
+            }).addTo(barRestaurantFg);
+        });
+
+        // viešbučių žymeklių funkcijų grupė
+        const hotelFg = L.featureGroup().addTo(map);
+
+        // viešbučių žymeklių pridėjimas
+        hotelMarkers.forEach(([lat, lng], index) => {
+            L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: "leaflet-marker-icon-hotel",
+                    html: `<span>${index + 1}</span>`,
+                    popupAnchor: [10, -7],
+                }),
+            }).addTo(hotelFg);
+        });
+
+        // funkcijų grupių pridėjimas prie žemėlapio
+        parkFg.addTo(map);
+        barRestaurantFg.addTo(map);
+        hotelFg.addTo(map);
+
+        // visų žymeklių skaičiavimas žemėlapyje
+        function allMarkersOnMap() {
+            const allMarkers = document.querySelector(".all-markers strong");
+            let allMarkersCount = 0;
+
+            // visų sluoksnių peržiūra
+            map.eachLayer((layer) => {
+                // jei sluoksnis yra žymeklis
+                if (layer instanceof L.Marker) {
+                    // padidinti skaitiklį
+                    allMarkersCount++;
+                }
+            });
+
+            // atnaujinti skaitiklį
+            allMarkers.textContent = allMarkersCount;
+        }
+        // funkcijos iškvietimas
+        allMarkersOnMap();
+
+        // matomų žymeklių skaičiavimas
+        function markersInView() {
+            // gauti žemėlapio ribas
+            const mapBounds = map.getBounds();
+
+            const markersInView = document.querySelector(".markers-in-view strong");
+            let markersInViewCount = 0;
+
+            // visų sluoksnių peržiūra
+            let index = 1;
+            map.eachLayer((layer) => {
+                // jei sluoksnis yra žymeklis
+                if (layer instanceof L.Marker) {
+                    // jei žymeklis yra žemėlapio ribose
+                    if (mapBounds.contains(layer.getLatLng())) {
+                        // atsitiktinis indeksas matomose ribose
+                        layer.bindPopup(`indeksas: <strong>${index.toString()}</strong>`);
+                        layer._icon.innerHTML = `<strong>${index}<strong>`;
+
+                        // pridedama klasė animacijai
+                        // kai žymeklis spustelėtas
+                        layer.on("click", () => {
+                            layer._icon.classList.add("animation");
+                        });
+
+                        // pašalinti klasę, kai iššokantis langas uždarytas
+                        layer.on("popupclose", () => {
+                            layer._icon.classList.remove("animation");
+                        });
+
+                        // padidinti skaitiklį
+                        markersInViewCount++;
+                        index++;
+                    }
+                }
+            });
+
+            // atnaujinti skaitiklį
+            markersInView.textContent = markersInViewCount;
+        }
+        // funkcijos iškvietimas
+        markersInView();
+
+        // ------------------------------------------
+        // matomų žymeklių skaičiavimas, kai žemėlapis judamas
+
+        map.on("moveend", function () {
+            markersInView();
+        });
+    </script>
+</body>
+</html>

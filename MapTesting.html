@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marsrutizatorius 2.0</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css">
+    <style>
+      body, html {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
+      #map {
+        height: 80%;
+      }
+
+      #result {
+        padding: 10px;
+      }
+
+      *,
+      :after,
+      :before {
+          box-sizing: border-box;
+          padding: 0;
+          margin: 0;
+      }
+
+      .description {
+          width: 250px;
+          font-size: 16px;
+          color: #333;
+          padding: 10px 14px;
+          background-color: hsla(0, 0%, 100%, 0.8);
+          box-shadow: 0 0 15px rgb(0 0 0 / 20%);
+          border-radius: 5px;
+          line-height: 120%;
+          border: 1px solid grey;
+      }
+
+      .legend {
+          position: absolute;
+          bottom: 10px;
+          right: 10px;
+          background: white;
+          padding: 10px;
+          border-radius: 5px;
+          box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+          font-size: 14px;
+          line-height: 1.5;
+          border: 1px solid grey;
+          z-index: 1000;
+          pointer-events: none;
+      }
+
+      .legend-item {
+          display: flex;
+          align-items: center;
+          margin-bottom: 5px;
+      }
+
+      .legend-color {
+          width: 20px;
+          height: 20px;
+          margin-right: 10px;
+          border-radius: 50%;
+          border: 3px solid;
+      }
+
+      .legend-color.park {
+          background: #00f134;
+          border-color: #00f134;
+      }
+
+      .legend-color.bar {
+          background: #ff5733;
+          border-color: #ff5733;
+      }
+
+      .legend-color.hotel {
+          background: #3498db;
+          border-color: #3498db;
+      }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="result"></div>
+    <form id="search-form">
+        <input id="search-input" type="text" placeholder="Search for a place">
+        <button type="submit">Search</button>
+    </form>
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color park"></div>Parkai
+        </div>
+        <div class="legend-item">
+            <div class="legend-color bar"></div>Barai and Restoranai
+        </div>
+        <div class="legend-item">
+            <div class="legend-color hotel"></div>Hoteliai
+        </div>
+    </div>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+      var map = L.map('map').setView([54.6872, 25.2797], 13);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+
+      var marker1, marker2, polyline, backupPolyline;
+
+      // Default icon for routes
+      var defaultIcon = L.icon({
+          iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+          iconSize: [25, 41], // size of the icon
+          iconAnchor: [12, 41], // point of the icon which will correspond to marker's location
+          popupAnchor: [1, -34], // point from which the popup should open relative to the iconAnchor
+          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+          shadowSize: [41, 41]
+      });
+
+      map.on('click', function(e) {
+          if (!marker1) {
+              marker1 = L.marker(e.latlng, {icon: defaultIcon}).addTo(map);
+          } else if (!marker2) {
+              marker2 = L.marker(e.latlng, {icon: defaultIcon}).addTo(map);
+              getRoute();
+          } else {
+              marker1.remove();
+              marker2.remove();
+              if (polyline) {
+                  polyline.remove();
+              }
+              if (backupPolyline) {
+                  backupPolyline.remove();
+              }
+              marker1 = L.marker(e.latlng, {icon: defaultIcon}).addTo(map);
+              marker2 = null;
+          }
+      });
+
+      document.getElementById('search-form').addEventListener('submit', function(e) {
+          e.preventDefault();
+          var query = document.getElementById('search-input').value;
+          searchPlace(query);
+      });
+
+      function searchPlace(query) {
+          fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query))
+          .then(function(response) {
+              return response.json();
+          })
+          .then(function(data) {
+              if (data && data.length > 0) {
+                  var place = data[0];
+                  map.setView([place.lat, place.lon], 13);
+                  if (!marker1) {
+                      marker1 = L.marker([place.lat, place.lon], {icon: defaultIcon}).addTo(map);
+                  } else if (!marker2) {
+                      marker2 = L.marker([place.lat, place.lon], {icon: defaultIcon}).addTo(map);
+                      getRoute();
+                  } else {
+                      marker1.setLatLng([place.lat, place.lon]);
+                      getRoute();
+                  }
+              } else {
+                  alert('No results found.');
+              }
+          })
+          .catch(function(error) {
+              console.log('Error:', error);
+          });
+      }
+
+      function getRoute() {
+          var latlngs = [marker1.getLatLng(), marker2.getLatLng()];
+          var routingUrl = 'https://router.project-osrm.org/route/v1/driving/' + 
+                          latlngs[0].lng + ',' + latlngs[0].lat + ';' + 
+                          latlngs[1].lng + ',' + latlngs[1].lat + '?overview=full&alternatives=true&geometries=geojson';
+          
+          fetch(routingUrl)
+          .then(function(response) {
+              return response.json();
+          })
+          .then(function(data) {
+              var routeGeometry = data.routes[0].geometry.coordinates.map(function(coord) {
+                  return [coord[1], coord[0]]; //[lat, lng]
+              });
+
+              var backupRouteGeometry = data.routes.length > 1 ? data.routes[1].geometry.coordinates.map(function(coord) {
+                  return [coord[1], coord[0]]; //[lat, lng]
+              }) : null;
+
+              if (polyline) {
+                  polyline.remove();
+              }
+              polyline = L.polyline(routeGeometry, {color: 'blue'}).addTo(map);
+
+              if (backupPolyline) {
+                  backupPolyline.remove();
+              }
+              if (backupRouteGeometry) {
+                  backupPolyline = L.polyline(backupRouteGeometry, {color: 'red'}).addTo(map);
+              }
+
+              var distance = data.routes[0].distance / 1000; // km
+              var duration = data.routes[0].duration; // seconds
+
+              var backupDistance = data.routes.length > 1 ? data.routes[1].distance / 1000 : null; // km
+              var backupDuration = data.routes.length > 1 ? data.routes[1].duration : null; // seconds
+
+              var walkDuration = (distance / 5) * 3600; // 5 km/h
+              var bikeDuration = (distance / 20) * 3600; // 20 km/h
+              var carDuration = duration; // directly in seconds
+
+              var backupWalkDuration = backupDistance ? (backupDistance / 5) * 3600 : null;
+              var backupBikeDuration = backupDistance ? (backupDistance / 20) * 3600 : null;
+              var backupCarDuration = backupDuration; // directly in seconds
+
+              var resultHtml = '1 kelias:<br>' +
+                  'Atstumas: ' + distance.toFixed(2) + ' km<br>' +
+                  'Laikas:<br>' +
+                  'Pesčiom: ' + formatDuration(walkDuration) + '<br>' +
+                  'Su Dviračiu: ' + formatDuration(bikeDuration) + '<br>' +
+                  'Su Mašina: ' + formatDuration(carDuration);
+
+              if (backupDistance && backupDuration) {
+                  resultHtml += '<br><br>2 kelias:<br>' +
+                      'Atstumas: ' + backupDistance.toFixed(2) + ' km<br>' +
+                      'Laikas:<br>' +
+                      'Pesčiom: ' + formatDuration(backupWalkDuration) + '<br>' +
+                      'Su Dviračiu: ' + formatDuration(backupBikeDuration) + '<br>' +
+                      'Su Mašina: ' + formatDuration(backupCarDuration);
+              }
+
+              document.getElementById('result').innerHTML = resultHtml;
+          });
+      }
+
+      function formatDuration(duration) {
+          var hours = Math.floor(duration / 3600);
+          var minutes = Math.floor((duration % 3600) / 60);
+          var seconds = Math.floor(duration % 60);
+
+          return (hours > 0 ? hours + 'h ' : '') + (minutes > 0 ? minutes + 'm ' : '') + seconds + 's';
+      }
+
+      var places = [
+    {
+        name: 'Vingio Parkas',
+        description: 'Didžiausias parkas Vilniuje',
+        type: 'park',
+        lat: 54.683,
+        lon: 25.238
+    },
+    {
+        name: 'Pavilnių regioninis parkas',
+        description: 'Gamtos ir istorijos parkas',
+        type: 'park',
+        lat: 54.687,
+        lon: 25.317
+    },
+    {
+        name: 'Bernardinu Parkas',
+        description: 'Vaizdingas parkas su upės vaizdais',
+        type: 'park',
+        lat: 54.682,
+        lon: 25.298
+    },
+    {
+        name: 'Sereikiškių Parkas',
+        description: 'Istorinis parkas Vilniaus centre',
+        type: 'park',
+        lat: 54.683,
+        lon: 25.294
+    },
+    {
+        name: 'Skybar',
+        description: 'Puikus vaizdas į miestą',
+        type: 'bar',
+        lat: 54.689,
+        lon: 25.273
+    },
+    {
+        name: 'Alaus namai',
+        description: 'Daug vietinių ir užsienio alų',
+        type: 'bar',
+        lat: 54.682,
+        lon: 25.279
+    },
+    {
+        name: 'Peronas',
+        description: 'Madingas baras su senoviniu traukiniu',
+        type: 'bar',
+        lat: 54.671,
+        lon: 25.287
+    },
+    {
+        name: 'Bix baras',
+        description: 'Alternatyvios muzikos ir gėrimų vieta',
+        type: 'bar',
+        lat: 54.678,
+        lon: 25.286
+    },
+    {
+        name: 'Radisson Blu Hotel',
+        description: 'Penkių žvaigždučių viešbutis',
+        type: 'hotel',
+        lat: 54.689,
+        lon: 25.269
+    },
+    {
+        name: 'Hotel Congress',
+        description: 'Keturios žvaigždutės, puiki vieta',
+        type: 'hotel',
+        lat: 54.690,
+        lon: 25.272
+    },
+    {
+        name: 'Amberton Hotel',
+        description: 'Viešbutis šalia Katedros aikštės',
+        type: 'hotel',
+        lat: 54.686,
+        lon: 25.288
+    },
+    {
+        name: 'Artis Centrum Hotels',
+        description: 'Modernus viešbutis senamiestyje',
+        type: 'hotel',
+        lat: 54.683,
+        lon: 25.285
+    },
+    {
+        name: 'Europos Parkas',
+        description: 'Muziejus po atviru dangumi',
+        type: 'park',
+        lat: 54.829,
+        lon: 25.084
+    },
+    {
+        name: 'Belmontas',
+        description: 'Parkas ir malūnas',
+        type: 'park',
+        lat: 54.678,
+        lon: 25.336
+    },
+    {
+        name: 'Verkių Parkas',
+        description: 'Gamtos rezervatas',
+        type: 'park',
+        lat: 54.741,
+        lon: 25.275
+    },
+    {
+        name: 'Kalnų Parkas',
+        description: 'Žalios kalvos ir istorinės vietos',
+        type: 'park',
+        lat: 54.685,
+        lon: 25.297
+    },
+    {
+        name: 'La Birra Pub',
+        description: 'Šiuolaikinis pubas su craft alaus pasirinkimu',
+        type: 'bar',
+        lat: 54.681,
+        lon: 25.281
+    },
+    {
+        name: 'Marsas',
+        description: 'Baras su atmosferine muzika ir kokteiliais',
+        type: 'bar',
+        lat: 54.678,
+        lon: 25.278
+    },
+    {
+        name: 'Bardakas',
+        description: 'Unikalus baras su linksmomis pramogomis',
+        type: 'bar',
+        lat: 54.680,
+        lon: 25.277
+    },
+    {
+        name: 'Sanatorija',
+        description: 'Stilingas baras su puikia atmosfera',
+        type: 'bar',
+        lat: 54.684,
+        lon: 25.278
+    },
+    {
+        name: 'Neringa Hotel',
+        description: 'Ikoninis viešbutis Vilniaus centre',
+        type: 'hotel',
+        lat: 54.687,
+        lon: 25.274
+    },
+    {
+        name: 'Stikliai Hotel',
+        description: 'Prabangus viešbutis su senoviniu interjeru',
+        type: 'hotel',
+        lat: 54.680,
+        lon: 25.285
+    },
+    {
+        name: 'Novotel Vilnius Centre',
+        description: 'Modernus viešbutis su patogumais',
+        type: 'hotel',
+        lat: 54.686,
+        lon: 25.278
+    },
+    {
+        name: 'Shakespeare Boutique Hotel',
+        description: 'Unikalus viešbutis su literatūros tema',
+        type: 'hotel',
+        lat: 54.681,
+        lon: 25.292
+    },
+    {
+        name: 'Vilniaus Universiteto Botanikos Sodai',
+        description: 'Botanikos sodai su gražiomis augalų kolekcijomis',
+        type: 'park',
+        lat: 54.723,
+        lon: 25.337
+    },
+    {
+        name: 'Trakų Vokės Dvaro Parkas',
+        description: 'Istorinis parkas su dvaru',
+        type: 'park',
+        lat: 54.613,
+        lon: 25.120
+    },
+    {
+        name: 'Barboros Radvilaitės Skveras',
+        description: 'Rami poilsio vieta su istorinėmis skulptūromis',
+        type: 'park',
+        lat: 54.683,
+        lon: 25.288
+    },
+    {
+        name: 'Uptown Bazaar',
+        description: 'Modernus turgus su maisto ir gėrimų pasirinkimu',
+        type: 'bar',
+        lat: 54.680,
+        lon: 25.273
+    },
+    {
+        name: 'Būsi Trečias',
+        description: 'Tradicinis baras su daugybe alaus rūšių',
+        type: 'bar',
+        lat: 54.682,
+        lon: 25.282
+    },
+    {
+        name: 'VAFOS Pub',
+        description: 'Draugiška vieta su skaniais užkandžiais ir gėrimais',
+        type: 'bar',
+        lat: 54.678,
+        lon: 25.275
+    },
+    {
+        name: 'Apvalaus Stalo Klubas',
+        description: 'Restoranas ir viešbutis su nuostabiu vaizdu į ežerą',
+        type: 'hotel',
+        lat: 54.643,
+        lon: 24.935
+    },
+    {
+        name: 'Vilniaus Grand Resort',
+        description: 'Prabangus kurortas su golfo aikštynu ir SPA',
+        type: 'hotel',
+        lat: 54.821,
+        lon: 25.183
+    },
+    {
+        name: 'Nidos Smiltė',
+        description: 'Modernus viešbutis su nuostabiu vaizdu į jūrą',
+        type: 'hotel',
+        lat: 55.303,
+        lon: 21.005
+    },
+    {
+        name: 'Kempinski Hotel Cathedral Square',
+        description: 'Prabangus viešbutis su aukščiausios klasės aptarnavimu',
+        type: 'hotel',
+        lat: 54.687,
+        lon: 25.287
+    },
+    {
+        name: 'Parko Vila',
+        description: 'Istorinis viešbutis su moderniais patogumais',
+        type: 'hotel',
+        lat: 54.646,
+        lon: 25.089
+    },
+    {
+        name: 'Vilniaus Simfonija',
+        description: 'Viešbutis su aukščiausios klasės restoranu',
+        type: 'hotel',
+        lat: 54.694,
+        lon: 25.266
+    },
+    {
+        name: 'Pasakų Parkas',
+        description: 'Šeimoms pritaikytas parkas su žaidimų aikštelėmis',
+        type: 'park',
+        lat: 54.662,
+        lon: 25.257
+    },
+    {
+        name: 'Žvėryno Parkas',
+        description: 'Rami poilsio vieta su daug žalumos',
+        type: 'park',
+        lat: 54.690,
+        lon: 25.244
+    }
+];
+
+      places.forEach(function(place) {
+          var markerColor;
+          switch (place.type) {
+              case 'park':
+                  markerColor = '#00f134';
+                  break;
+              case 'bar':
+                  markerColor = '#ff5733';
+                  break;
+              case 'hotel':
+                  markerColor = '#3498db';
+                  break;
+              default:
+                  markerColor = 'black';
+          }
+
+          var placeIcon = L.divIcon({
+              className: 'custom-div-icon',
+              html: `<div style="background-color:${markerColor}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid ${markerColor};"></div>`,
+              iconSize: [20, 20],
+              iconAnchor: [10, 20],
+              popupAnchor: [0, -20]
+          });
+
+          var marker = L.marker([place.lat, place.lon], {icon: placeIcon}).addTo(map);
+
+          marker.bindPopup('<div class="description"><strong>' + place.name + '</strong><br>' + place.description + '</div>');
+      });
+    </script>
+</body>
+</html>
